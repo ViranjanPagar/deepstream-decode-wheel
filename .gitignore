@@ -1,0 +1,18 @@
+# Bundled binary libs — extracted from NVIDIA's tbz2 at build time. Not
+# redistributable, never commit.
+src/deepstream_decode/_libs/**/*.so
+src/deepstream_decode/_libs/**/*.so.*
+
+# Build artifacts
+dist/*.whl
+build/
+*.egg-info/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Extracted SDK staging
+deepstream_sdk_v*_x86_64/
+*.tbz2

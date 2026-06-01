@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "deepstream-decode"
+dynamic = ["version"]
+description = "GPU-resident video decode via NVIDIA DeepStream — single-wheel install bundles the DS shared libs in a flat _libs/ directory and sets GST_PLUGIN_PATH + LIBV4L2_PLUGIN_DIR on import."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Viranjan Pagar", email = "vpagar@nvidia.com" },
+]
+keywords = ["deepstream", "nvdec", "video", "gpu", "gstreamer", "vllm", "cuda"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+]
+
+dependencies = [
+    # pymediainfo wraps the libmediainfo C++ library; used by
+    # `deepstream_decode.probe_metadata` to read container metadata
+    # (frame_count, fps, duration, resolution) before computing
+    # equidistant frame indices. Pure Python binding + libmediainfo —
+    # no GPU dependency. The Linux wheel on PyPI ships its own bundled
+    # libmediainfo, so no apt step is needed.
+    "pymediainfo>=6.0",
+]
+
+# No optional pip extras — system deps (GStreamer, PyGObject, libv4l)
+# come from apt, see README.md "Install (consumer side)".
+
+[project.scripts]
+deepstream-decode-selftest = "deepstream_decode._selftest:main"
+
+[tool.hatch.version]
+path = "src/deepstream_decode/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/deepstream_decode"]
+
+# Force-include the bundled .so files. Without this, hatchling excludes
+# binary data by default.
+[tool.hatch.build.targets.wheel.force-include]
+"src/deepstream_decode/_libs" = "deepstream_decode/_libs"
