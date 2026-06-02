@@ -57,38 +57,53 @@ from deepstream_decode import (
     DecodePool,        # pool of N file-decode pipelines on N threads
     StreamHandle,      # one persistent pipeline for an RTSP/URI stream
     DecodeFrames,      # @dataclass: frames, n_kept, n_total, fps, error
-    probe_metadata,    # cheap container-metadata probe (no decode)
-    VideoMetadata,     # NamedTuple: frame_count, fps, duration_sec, width, height
+    probe_metadata,    # GStreamer-only metadata probe (no decode, no PyAV)
     lib_dir,           # path to the bundled _libs/ directory
 )
 ```
 
-### `probe_metadata(filepath) -> VideoMetadata`
+### `probe_metadata(data) -> (frame_count, fps, duration_sec, width, height, codec)`
 
-Read a video file's container metadata (frame count, fps, duration,
-resolution) **without** decoding any frames. Used by consumers to
-compute equidistant frame indices before submitting a `DecodePool.decode()`
-request.
+Read container metadata from raw `bytes` using **GStreamer only** — an
+`appsrc → parsebin → fakesink` pipeline prerolled to PAUSED, so no frames
+are decoded and no external library (PyAV / libmediainfo) is needed.
+`frame_count` is derived as `round(duration × fps)`; unknown numeric
+fields are `0` and `codec` is `""`.
+
+### `DecodePool.decode(data, *, target_indices, codec="", max_frames, timeout_sec) -> DecodeFrames`
+
+Decode raw container `bytes` on a pool worker and keep the frames whose
+decode-order index is in `target_indices` (returns exactly those frames,
+1:1 with the indices). The bytes are pushed into an in-process `appsrc`
+pipeline — **no file path** — so HTTP, base64, and local-file sources
+decode identically. The whole stream is decoded and the requested indices
+are kept.
 
 ```python
-from deepstream_decode import probe_metadata
+from deepstream_decode import DecodePool, probe_metadata
 
-meta = probe_metadata("/path/to/video.mp4")
-print(meta.frame_count, meta.fps, meta.duration_sec, meta.width, meta.height)
+pool = DecodePool(num_workers=8)
+data = open("/path/to/video.mp4", "rb").read()
 
-# Backward-compatible with plain-tuple unpacking:
-frame_count, fps, dur, w, h = probe_metadata("/path/to/video.mp4")
-
-# Compute equidistant frame indices for an 8-frame sample:
+# Probe metadata (GStreamer, no decode) to know the frame count, then pick
+# a uniform sample. fc/codec come straight from the wheel — no PyAV.
+fc, fps, dur, w, h, codec = probe_metadata(data)
 import numpy as np
-indices = np.linspace(0, meta.frame_count - 1, 8, dtype=int).tolist()
+indices = np.linspace(0, fc - 1, 8, dtype=int).tolist()
+
+out = pool.decode(data, target_indices=indices, codec=codec,
+                  max_frames=len(indices))
+# out.frames is a CUDA tensor (out.n_kept, H, W, 3) uint8 — no D2H copy.
 ```
 
-Backed by `libmediainfo` (auto-installed as a wheel dependency). Reads
-the container index only — no codec context, no frame decode. Typical
-cost: <10 ms per file.
+`codec` (e.g. `"h264"`/`"hevc"`) is an optional hint: a worker keeps its
+NVDEC session warm across same-codec streams and rebuilds only on a codec
+change. Omit it to disable that check.
 
-Any unknown field is returned as `0`.
+> Frame selection is by index here, which is exact (1:1). A GOP-drop fast
+> path (decode only the GOPs that contain a sampled frame) needs PTS-based
+> selection and is intentionally not enabled, since PTS targets aren't 1:1
+> with indices when a stream's PTS don't align with `idx / fps`.
 
 ## What ships in the wheel
 

@@ -158,7 +158,7 @@ def main() -> int:
             + os.environ.get("GST_PLUGIN_PATH", "")
         )
         Gst.init(None)
-        for elem in ("filesrc", "parsebin", "nvv4l2decoder", "nvvideoconvert"):
+        for elem in ("appsrc", "parsebin", "nvv4l2decoder", "nvvideoconvert"):
             if Gst.ElementFactory.find(elem):
                 _ok(f"element '{elem}' available")
             else:

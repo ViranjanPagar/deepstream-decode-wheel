@@ -40,8 +40,7 @@ shell don't inherit Python's env, and would need an explicit export.
 # _ds_dec runs _preload_deepstream_libs() at module import time, which
 # sets GST_PLUGIN_PATH + LIBV4L2_PLUGIN_DIR via _runtime helpers and
 # ctypes-preloads the foundation libs.
-from ._ds_dec import DecodeFrames, DecodePool, StreamHandle
-from ._probe import VideoMetadata, probe_metadata
+from ._ds_dec import DecodeFrames, DecodePool, StreamHandle, probe_metadata
 from ._runtime import lib_dir, plugin_dir
 from ._version import __version__
 
@@ -49,7 +48,6 @@ __all__ = [
     "DecodeFrames",
     "DecodePool",
     "StreamHandle",
-    "VideoMetadata",
     "__version__",
     "lib_dir",
     "plugin_dir",

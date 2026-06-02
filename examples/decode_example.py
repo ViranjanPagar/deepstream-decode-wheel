@@ -43,36 +43,32 @@ def show_setup() -> None:
     print("└───────────────────────────────────────────────────────────────")
 
 
-def show_metadata(filepath: str) -> None:
-    """Demonstrate the metadata probe: cheap container-only read, no decode."""
-    from deepstream_decode import probe_metadata
+def decode_file(path: str, num_workers: int = 2, max_frames: int = 8) -> None:
+    """File-decode path — DecodePool builds N appsrc→nvv4l2decoder pipelines
+    on N daemon threads. The file is read into memory and pushed as bytes;
+    the requested frame indices are kept (exactly N). Each .decode() call
+    picks a free worker."""
+    import numpy as np
 
-    print(f"\n=== Metadata probe: {filepath} ===")
-    meta = probe_metadata(filepath)
-    print(f"  frame_count    : {meta.frame_count}")
-    print(f"  fps            : {meta.fps}")
-    print(f"  duration_sec   : {meta.duration_sec}")
-    print(f"  width x height : {meta.width} x {meta.height}")
-    # `meta` also unpacks positionally:
-    #   fc, fps, dur, w, h = meta
+    from deepstream_decode import DecodePool, probe_metadata
 
-
-def decode_file(uri: str, num_workers: int = 2, max_frames: int = 8) -> None:
-    """File-decode path — DecodePool builds N filesrc→nvv4l2decoder pipelines
-    on N daemon threads. Each call to .decode() picks a free worker."""
-    from deepstream_decode import DecodePool
-
-    if not uri.startswith(("file://", "http://", "https://")):
-        # Pool expects a URI; convert a bare filesystem path.
-        uri = f"file://{os.path.abspath(uri)}"
-
-    print(f"\n=== File decode: {uri} ===")
+    print(f"\n=== File decode: {path} ===")
     print(f"  workers={num_workers}, max_frames={max_frames}")
+
+    with open(path, "rb") as fh:
+        data = fh.read()
+
+    # Probe metadata (GStreamer, no decode) for the frame count, then take a
+    # uniform sample — the same shape a real consumer (e.g. vLLM) produces.
+    fc, fps, dur, w, h, codec = probe_metadata(data)
+    indices = np.linspace(0, max(fc - 1, 0), max_frames, dtype=int).tolist()
 
     pool = DecodePool(num_workers=num_workers)
     try:
         t0 = time.time()
-        result = pool.decode(uri, max_frames=max_frames, timeout_sec=30.0)
+        result = pool.decode(
+            data, target_indices=indices, codec=codec, max_frames=max_frames,
+            timeout_sec=30.0)
         dt = time.time() - t0
 
         if result.error:
@@ -151,11 +147,6 @@ def main() -> int:
         print(f"\nERROR: video not found: {args.video}", file=sys.stderr)
         print("Pass a path or URI as the first argument.", file=sys.stderr)
         return 1
-
-    # Probe the metadata first (cheap, no decode). A real consumer would use
-    # this to compute equidistant frame indices, decide chunk sizes, etc.
-    if "://" not in args.video:
-        show_metadata(args.video)
 
     decode_file(args.video, num_workers=args.workers, max_frames=args.frames)
 

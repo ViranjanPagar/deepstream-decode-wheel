@@ -22,15 +22,11 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
 ]
 
-dependencies = [
-    # pymediainfo wraps the libmediainfo C++ library; used by
-    # `deepstream_decode.probe_metadata` to read container metadata
-    # (frame_count, fps, duration, resolution) before computing
-    # equidistant frame indices. Pure Python binding + libmediainfo —
-    # no GPU dependency. The Linux wheel on PyPI ships its own bundled
-    # libmediainfo, so no apt step is needed.
-    "pymediainfo>=6.0",
-]
+# No Python runtime dependencies. Container metadata (frame_count, fps,
+# duration) is probed by the consumer — vLLM uses PyAV — so the former
+# pymediainfo/libmediainfo dependency is no longer needed. System deps
+# (GStreamer, PyGObject, libv4l) come from apt; see README.md.
+dependencies = []
 
 # No optional pip extras — system deps (GStreamer, PyGObject, libv4l)
 # come from apt, see README.md "Install (consumer side)".
